@@ -25,6 +25,11 @@ from image.transforms import (
     to_grayscale, adjust_brightness, adjust_contrast,
     adjust_saturation, linear_correction, nonlinear_correction,
 )
+from image.features import (
+    SUPPORTED_DETECTORS,
+    detect_keypoints,
+    find_most_similar_pair,
+)
 
 
 class MainWindow(QMainWindow):
@@ -97,6 +102,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self._create_morphology_tab(), "Морфология")
         self.tabs.addTab(self._create_filter_tab(), "Фильтры")
         self.tabs.addTab(self._create_edges_tab(), "Контуры")
+        self.tabs.addTab(self._create_features_tab(), "Ключевые точки")
 
         right_layout.addWidget(info_group)
         right_layout.addWidget(self.tabs, stretch=1)
@@ -769,5 +775,141 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 "Ошибка обнаружения границ",
+                str(exc),
+            )
+
+    def _create_features_tab(self):
+
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        layout.addWidget(QLabel("Обнаружение ключевых точек"))
+
+        self.feature_detector = QComboBox()
+        self.feature_detector.addItems(SUPPORTED_DETECTORS)
+        layout.addWidget(self.feature_detector)
+
+        layout.addWidget(QLabel("Максимум ключевых точек:"))
+
+        self.feature_max_points = QSpinBox()
+        self.feature_max_points.setRange(1, 10000)
+        self.feature_max_points.setValue(500)
+        layout.addWidget(self.feature_max_points)
+
+        layout.addWidget(QLabel("Порог чувствительности:"))
+
+        self.feature_threshold = QDoubleSpinBox()
+        self.feature_threshold.setRange(0.001, 0.2)
+        self.feature_threshold.setDecimals(3)
+        self.feature_threshold.setSingleStep(0.005)
+        self.feature_threshold.setValue(0.01)
+        layout.addWidget(self.feature_threshold)
+
+        self.feature_apply_button = QPushButton(
+            "Обнаружить ключевые точки"
+        )
+        self.feature_apply_button.clicked.connect(
+            self.apply_feature_detector
+        )
+        layout.addWidget(self.feature_apply_button)
+
+        self.feature_result_label = QLabel("Ключевых точек: —")
+        layout.addWidget(self.feature_result_label)
+
+        layout.addWidget(QLabel("Поиск наиболее похожей пары"))
+
+        self.similarity_button = QPushButton(
+            "Выбрать 3–10 изображений"
+        )
+        self.similarity_button.clicked.connect(
+            self.find_similar_images
+        )
+        layout.addWidget(self.similarity_button)
+
+        self.similarity_result_label = QLabel(
+            "Результат сравнения появится здесь."
+        )
+        self.similarity_result_label.setWordWrap(True)
+        layout.addWidget(self.similarity_result_label)
+
+        layout.addStretch()
+        return tab
+
+    def apply_feature_detector(self):
+
+        if self.current_image is None:
+            QMessageBox.information(
+                self,
+                "Нет изображения",
+                "Сначала загрузите изображение.",
+            )
+            return
+
+        try:
+            result, count = detect_keypoints(
+                self.current_image,
+                self.feature_detector.currentText(),
+                self.feature_max_points.value(),
+                self.feature_threshold.value(),
+            )
+
+            self.current_image = result
+            self._display_image(result)
+
+            self.feature_result_label.setText(
+                f"Обнаружено ключевых точек: {count}"
+            )
+
+            self.statusBar().showMessage(
+                f"Детектор {self.feature_detector.currentText()}: "
+                f"{count} точек."
+            )
+
+        except (ValueError, TypeError, cv2.error) as exc:
+            QMessageBox.warning(
+                self,
+                "Ошибка обнаружения точек",
+                str(exc),
+            )
+
+    def find_similar_images(self):
+
+        paths, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Выберите от 3 до 10 изображений",
+            "",
+            "Изображения (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.webp)",
+        )
+
+        if not paths:
+            return
+
+        if not 3 <= len(paths) <= 10:
+            QMessageBox.warning(
+                self,
+                "Некорректное количество файлов",
+                "Выберите от 3 до 10 изображений.",
+            )
+            return
+
+        try:
+            result = find_most_similar_pair(paths)
+
+            self.similarity_result_label.setText(
+                "Наиболее похожая пара:\n"
+                f"1. {result['first_path']}\n"
+                f"2. {result['second_path']}\n\n"
+                f"Оценка сходства: {result['similarity_percent']:.2f}%\n"
+                f"Хороших совпадений: {result['good_matches']}"
+            )
+
+            self.statusBar().showMessage(
+                "Поиск наиболее похожей пары завершён."
+            )
+
+        except (ValueError, TypeError, cv2.error) as exc:
+            QMessageBox.warning(
+                self,
+                "Ошибка сравнения изображений",
                 str(exc),
             )

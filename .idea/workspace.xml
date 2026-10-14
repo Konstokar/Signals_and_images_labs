@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="20d0ac06-a2e6-439b-b283-b6a9812934db" name="Changes" comment="Fifth step - filters">
-      <change beforePath="$PROJECT_DIR$/image/edges.py" beforeDir="false" afterPath="$PROJECT_DIR$/image/edges.py" afterDir="false" />
+    <list default="true" id="20d0ac06-a2e6-439b-b283-b6a9812934db" name="Changes" comment="Sixth step - edges">
+      <change beforePath="$PROJECT_DIR$/gui/main_window.py" beforeDir="false" afterPath="$PROJECT_DIR$/gui/main_window.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/image/features.py" beforeDir="false" afterPath="$PROJECT_DIR$/image/features.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -157,7 +158,15 @@
       <option name="project" value="LOCAL" />
       <updated>1791966229564</updated>
     </task>
-    <option name="localTasksCounter" value="8" />
+    <task id="LOCAL-00008" summary="Sixth step - edges">
+      <option name="closed" value="true" />
+      <created>1791966549093</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1791966549093</updated>
+    </task>
+    <option name="localTasksCounter" value="9" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
@@ -167,6 +176,7 @@
     <MESSAGE value="Third step - histograms" />
     <MESSAGE value="Fourth step - morphology" />
     <MESSAGE value="Fifth step - filters" />
-    <option name="LAST_COMMIT_MESSAGE" value="Fifth step - filters" />
+    <MESSAGE value="Sixth step - edges" />
+    <option name="LAST_COMMIT_MESSAGE" value="Sixth step - edges" />
   </component>
 </project>
