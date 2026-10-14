@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QGroupBox, QFormLayout,
     QMessageBox, QScrollArea, QTabWidget, QComboBox,
     QDoubleSpinBox, QSpinBox, QLineEdit, QGridLayout,
+    QCheckBox, QApplication,
 )
 from image.morphology import (
     SUPPORTED_OPERATIONS,
@@ -30,7 +31,11 @@ from image.features import (
     detect_keypoints,
     find_most_similar_pair,
 )
-
+from video.background import process_video_background
+from video.motion_blur import (
+    process_video_motion_blur,
+    DIRECTIONS,
+)
 
 class MainWindow(QMainWindow):
 
@@ -103,6 +108,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self._create_filter_tab(), "Фильтры")
         self.tabs.addTab(self._create_edges_tab(), "Контуры")
         self.tabs.addTab(self._create_features_tab(), "Ключевые точки")
+        self.tabs.addTab(self._create_video_tab(), "Видео")
 
         right_layout.addWidget(info_group)
         right_layout.addWidget(self.tabs, stretch=1)
@@ -913,3 +919,272 @@ class MainWindow(QMainWindow):
                 "Ошибка сравнения изображений",
                 str(exc),
             )
+
+    def _create_video_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        description = QLabel(
+            "Обработка видеороликов: выделение движущихся объектов "
+            "и направленное размытие движения. Для стабильного "
+            "результата используйте ролик с неподвижной камерой."
+        )
+        description.setWordWrap(True)
+        layout.addWidget(description)
+
+        self.video_path_label = QLabel("Видео не выбрано.")
+        self.video_path_label.setWordWrap(True)
+        layout.addWidget(self.video_path_label)
+
+        self.video_open_button = QPushButton("Выбрать видео")
+        self.video_open_button.clicked.connect(self.open_video)
+        layout.addWidget(self.video_open_button)
+
+        layout.addWidget(QLabel("История модели MOG2 (кадры):"))
+        self.video_history = QSpinBox()
+        self.video_history.setRange(1, 10000)
+        self.video_history.setValue(500)
+        layout.addWidget(self.video_history)
+
+        layout.addWidget(QLabel("Порог чувствительности MOG2:"))
+        self.video_threshold = QDoubleSpinBox()
+        self.video_threshold.setRange(1.0, 100.0)
+        self.video_threshold.setDecimals(1)
+        self.video_threshold.setSingleStep(1.0)
+        self.video_threshold.setValue(16.0)
+        layout.addWidget(self.video_threshold)
+
+        self.video_shadows = QCheckBox(
+            "Учитывать тени при вычитании фона"
+        )
+        self.video_shadows.setChecked(True)
+        layout.addWidget(self.video_shadows)
+
+        layout.addWidget(QLabel("Кадры обучения модели фона:"))
+        self.video_warmup = QSpinBox()
+        self.video_warmup.setRange(0, 1000)
+        self.video_warmup.setValue(30)
+        layout.addWidget(self.video_warmup)
+
+        self.video_background_button = QPushButton(
+            "Выделить движущиеся объекты и сохранить маску"
+        )
+        self.video_background_button.clicked.connect(
+            self.run_video_background
+        )
+        layout.addWidget(self.video_background_button)
+
+        layout.addWidget(QLabel("Размытие движения"))
+
+        layout.addWidget(QLabel("Размер ядра (нечётное число):"))
+        self.video_blur_kernel = QSpinBox()
+        self.video_blur_kernel.setRange(3, 51)
+        self.video_blur_kernel.setSingleStep(2)
+        self.video_blur_kernel.setValue(15)
+        layout.addWidget(self.video_blur_kernel)
+
+        layout.addWidget(QLabel("Направление размытия:"))
+        self.video_blur_direction = QComboBox()
+        self.video_blur_direction.addItems(DIRECTIONS)
+        layout.addWidget(self.video_blur_direction)
+
+        self.video_blur_button = QPushButton(
+            "Размыть движущиеся объекты и сохранить видео"
+        )
+        self.video_blur_button.clicked.connect(
+            self.run_video_motion_blur
+        )
+        layout.addWidget(self.video_blur_button)
+
+        self.video_result_label = QLabel(
+            "Выберите ролик, затем запустите нужную обработку."
+        )
+        self.video_result_label.setWordWrap(True)
+        layout.addWidget(self.video_result_label)
+
+        layout.addStretch()
+        return tab
+
+    def open_video(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Выберите видео",
+            "",
+            "Видео (*.mp4 *.avi *.mov *.mkv *.m4v *.wmv)",
+        )
+
+        if not path:
+            return
+
+        capture = cv2.VideoCapture(path)
+
+        if not capture.isOpened():
+            capture.release()
+            QMessageBox.warning(
+                self,
+                "Ошибка открытия",
+                "OpenCV не смог открыть выбранный видеофайл.",
+            )
+            return
+
+        width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fps = capture.get(cv2.CAP_PROP_FPS)
+        frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+        capture.release()
+
+        self.video_path = path
+
+        self.video_path_label.setText(
+            f"Файл: {Path(path).name}\n"
+            f"Разрешение: {width} × {height}\n"
+            f"FPS: {fps:.2f} | Кадров: {frames}"
+        )
+
+        self.video_result_label.setText(
+            "Видео готово к обработке."
+        )
+        self.statusBar().showMessage(
+            f"Выбрано видео: {Path(path).name}"
+        )
+
+    def _choose_video_output(self, title):
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            title,
+            "",
+            "Видео MP4 (*.mp4)",
+        )
+
+        if path and Path(path).suffix.lower() != ".mp4":
+            path = str(Path(path).with_suffix(".mp4"))
+
+        return path
+
+    def _video_progress(self, processed, total):
+        if total > 0:
+            percent = min(
+                100,
+                int(processed * 100 / total),
+            )
+
+            self.video_result_label.setText(
+                f"Обработка видео: {processed} из {total} "
+                f"кадров ({percent}%)."
+            )
+        else:
+            self.video_result_label.setText(
+                f"Обработано кадров: {processed}."
+            )
+
+        # Даём Qt возможность обновить интерфейс.
+        QApplication.processEvents()
+
+    def run_video_background(self):
+        if not getattr(self, "video_path", None):
+            QMessageBox.information(
+                self,
+                "Нет видео",
+                "Сначала выберите видеоролик.",
+            )
+            return
+
+        output_path = self._choose_video_output(
+            "Сохранить маску движущихся объектов"
+        )
+
+        if not output_path:
+            return
+
+        self.video_background_button.setEnabled(False)
+        self.video_blur_button.setEnabled(False)
+
+        try:
+            result = process_video_background(
+                self.video_path,
+                output_path,
+                history=self.video_history.value(),
+                var_threshold=self.video_threshold.value(),
+                detect_shadows=self.video_shadows.isChecked(),
+                warmup_frames=self.video_warmup.value(),
+                progress_callback=self._video_progress,
+            )
+
+            self.video_result_label.setText(
+                "Выделение движения завершено.\n"
+                f"Файл: {result['output_path']}\n"
+                f"Кадров обработано: {result['frames_processed']}\n"
+                f"Разрешение: {result['width']} × "
+                f"{result['height']}\n"
+                "В маске фон чёрный, движущиеся области светлые."
+            )
+
+            self.statusBar().showMessage(
+                "Вычитание фона завершено."
+            )
+
+        except (ValueError, OSError, cv2.error) as exc:
+            QMessageBox.warning(
+                self,
+                "Ошибка обработки видео",
+                str(exc),
+            )
+
+        finally:
+            self.video_background_button.setEnabled(True)
+            self.video_blur_button.setEnabled(True)
+
+    def run_video_motion_blur(self):
+        if not getattr(self, "video_path", None):
+            QMessageBox.information(
+                self,
+                "Нет видео",
+                "Сначала выберите видеоролик.",
+            )
+            return
+
+        output_path = self._choose_video_output(
+            "Сохранить видео с размытием движения"
+        )
+
+        if not output_path:
+            return
+
+        self.video_background_button.setEnabled(False)
+        self.video_blur_button.setEnabled(False)
+
+        try:
+            result = process_video_motion_blur(
+                self.video_path,
+                output_path,
+                kernel_size=self.video_blur_kernel.value(),
+                direction=self.video_blur_direction.currentText(),
+                history=self.video_history.value(),
+                var_threshold=self.video_threshold.value(),
+                warmup_frames=self.video_warmup.value(),
+                progress_callback=self._video_progress,
+            )
+
+            self.video_result_label.setText(
+                "Размытие движения завершено.\n"
+                f"Файл: {result['output_path']}\n"
+                f"Кадров обработано: {result['frames_processed']}\n"
+                f"Разрешение: {result['width']} × "
+                f"{result['height']}\n"
+                "Исходная звуковая дорожка не сохраняется."
+            )
+
+            self.statusBar().showMessage(
+                "Размытие движения завершено."
+            )
+
+        except (ValueError, OSError, cv2.error) as exc:
+            QMessageBox.warning(
+                self,
+                "Ошибка обработки видео",
+                str(exc),
+            )
+
+        finally:
+            self.video_background_button.setEnabled(True)
+            self.video_blur_button.setEnabled(True)
