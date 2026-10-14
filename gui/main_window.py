@@ -1,6 +1,8 @@
 from pathlib import Path
 
 import cv2
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+from image.histogram import create_histogram_figure
 from PIL import Image
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap, QImage
@@ -85,6 +87,7 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.tabs.addTab(self._create_color_tab(), "Цветовые модели")
         self.tabs.addTab(self._create_transform_tab(), "Преобразования")
+        self.tabs.addTab(self._create_histogram_tab(), "Гистограммы")
 
         right_layout.addWidget(info_group)
         right_layout.addWidget(self.tabs, stretch=1)
@@ -284,6 +287,9 @@ class MainWindow(QMainWindow):
             self.current_image = function(self.current_image, *args)
             self._display_image(self.current_image)
             self.statusBar().showMessage("Преобразование применено.")
+            if self.tabs.currentWidget() is not None:
+                if self.tabs.currentIndex() == 2:
+                    self.update_histograms()
         except (ValueError, TypeError, cv2.error) as exc:
             QMessageBox.warning(self, "Ошибка преобразования", str(exc))
 
@@ -354,3 +360,80 @@ class MainWindow(QMainWindow):
         super().resizeEvent(event)
         if self.current_image is not None:
             self._display_image(self.current_image)
+
+
+    def _create_histogram_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        description = QLabel(
+            "Сравнение распределения интенсивностей пикселей "
+            "исходного и обработанного изображений."
+        )
+        description.setWordWrap(True)
+        layout.addWidget(description)
+
+        controls = QHBoxLayout()
+
+        controls.addWidget(QLabel("Отображаемый канал:"))
+
+        self.histogram_channel = QComboBox()
+        self.histogram_channel.addItems([
+            "Яркость",
+            "Красный (R)",
+            "Зелёный (G)",
+            "Синий (B)",
+            "Все RGB",
+        ])
+
+        controls.addWidget(self.histogram_channel)
+
+        self.histogram_button = QPushButton("Построить гистограммы")
+        self.histogram_button.clicked.connect(
+            self.update_histograms
+        )
+
+        controls.addWidget(self.histogram_button)
+        layout.addLayout(controls)
+
+        self.histogram_canvas = FigureCanvasQTAgg(
+            create_histogram_figure(
+                Image.new("RGB", (1, 1), "black"),
+                Image.new("RGB", (1, 1), "black"),
+            )
+        )
+
+        layout.addWidget(self.histogram_canvas, stretch=1)
+
+        return tab
+
+    def update_histograms(self):
+        if self.original_image is None or self.current_image is None:
+            QMessageBox.information(
+                self,
+                "Нет изображения",
+                "Сначала загрузите изображение.",
+            )
+            return
+
+        try:
+            figure = create_histogram_figure(
+                self.original_image,
+                self.current_image,
+                self.histogram_channel.currentText(),
+            )
+
+            self.histogram_canvas.figure.clear()
+            self.histogram_canvas.figure = figure
+            self.histogram_canvas.draw()
+
+            self.statusBar().showMessage(
+                "Гистограммы построены."
+            )
+
+        except (ValueError, TypeError) as exc:
+            QMessageBox.warning(
+                self,
+                "Ошибка построения гистограммы",
+                str(exc),
+            )
