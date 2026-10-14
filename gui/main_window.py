@@ -32,6 +32,7 @@ from image.features import (
     find_most_similar_pair,
 )
 from video.background import process_video_background
+from video.frame_difference import process_video_frame_difference
 from video.motion_blur import (
     process_video_motion_blur,
     DIRECTIONS,
@@ -920,14 +921,16 @@ class MainWindow(QMainWindow):
                 str(exc),
             )
 
+
+
     def _create_video_tab(self):
         tab = QWidget()
         layout = QVBoxLayout(tab)
 
         description = QLabel(
-            "Обработка видеороликов: выделение движущихся объектов "
-            "и направленное размытие движения. Для стабильного "
-            "результата используйте ролик с неподвижной камерой."
+            "Сравнение двух методов обнаружения движения: MOG2 "
+            "и разности соседних кадров. Можно сохранить маску "
+            "и видео с красным наложением на исходный ролик."
         )
         description.setWordWrap(True)
         layout.addWidget(description)
@@ -940,34 +943,121 @@ class MainWindow(QMainWindow):
         self.video_open_button.clicked.connect(self.open_video)
         layout.addWidget(self.video_open_button)
 
-        layout.addWidget(QLabel("История модели MOG2 (кадры):"))
+        layout.addWidget(QLabel("Алгоритм обнаружения движения:"))
+
+        self.video_algorithm = QComboBox()
+        self.video_algorithm.addItems([
+            "MOG2",
+            "Разность соседних кадров",
+        ])
+        self.video_algorithm.currentTextChanged.connect(
+            self._update_video_algorithm_controls
+        )
+        layout.addWidget(self.video_algorithm)
+
+        self.video_mog2_group = QGroupBox("Параметры MOG2")
+        mog2_layout = QVBoxLayout(self.video_mog2_group)
+
+        mog2_layout.addWidget(
+            QLabel("История модели (кадры):")
+        )
         self.video_history = QSpinBox()
         self.video_history.setRange(1, 10000)
-        self.video_history.setValue(500)
-        layout.addWidget(self.video_history)
+        self.video_history.setValue(120)
+        mog2_layout.addWidget(self.video_history)
 
-        layout.addWidget(QLabel("Порог чувствительности MOG2:"))
+        mog2_layout.addWidget(
+            QLabel("Порог чувствительности MOG2:")
+        )
         self.video_threshold = QDoubleSpinBox()
         self.video_threshold.setRange(1.0, 100.0)
         self.video_threshold.setDecimals(1)
-        self.video_threshold.setSingleStep(1.0)
-        self.video_threshold.setValue(16.0)
-        layout.addWidget(self.video_threshold)
+        self.video_threshold.setValue(25.0)
+        mog2_layout.addWidget(self.video_threshold)
 
         self.video_shadows = QCheckBox(
             "Учитывать тени при вычитании фона"
         )
-        self.video_shadows.setChecked(True)
-        layout.addWidget(self.video_shadows)
+        self.video_shadows.setChecked(False)
+        mog2_layout.addWidget(self.video_shadows)
 
-        layout.addWidget(QLabel("Кадры обучения модели фона:"))
+        mog2_layout.addWidget(
+            QLabel("Скорость адаптации фона:")
+        )
+        self.video_learning_rate = QDoubleSpinBox()
+        self.video_learning_rate.setRange(0.001, 0.1)
+        self.video_learning_rate.setDecimals(3)
+        self.video_learning_rate.setSingleStep(0.005)
+        self.video_learning_rate.setValue(0.01)
+        mog2_layout.addWidget(self.video_learning_rate)
+
+        layout.addWidget(self.video_mog2_group)
+
+        self.video_difference_group = QGroupBox(
+            "Параметры разности кадров"
+        )
+        difference_layout = QVBoxLayout(
+            self.video_difference_group
+        )
+
+        difference_layout.addWidget(
+            QLabel("Порог изменения яркости (0–255):")
+        )
+        self.video_diff_threshold = QSpinBox()
+        self.video_diff_threshold.setRange(0, 255)
+        self.video_diff_threshold.setValue(25)
+        difference_layout.addWidget(
+            self.video_diff_threshold
+        )
+
+        layout.addWidget(self.video_difference_group)
+
+        common_group = QGroupBox("Общие параметры")
+        common_layout = QVBoxLayout(common_group)
+
+        common_layout.addWidget(
+            QLabel("Количество начальных кадров обучения:")
+        )
         self.video_warmup = QSpinBox()
         self.video_warmup.setRange(0, 1000)
-        self.video_warmup.setValue(30)
-        layout.addWidget(self.video_warmup)
+        self.video_warmup.setValue(10)
+        common_layout.addWidget(self.video_warmup)
+
+        common_layout.addWidget(
+            QLabel("Порог обнаружения смены сцены:")
+        )
+        self.video_scene_threshold = QDoubleSpinBox()
+        self.video_scene_threshold.setRange(0.1, 0.9)
+        self.video_scene_threshold.setDecimals(2)
+        self.video_scene_threshold.setSingleStep(0.05)
+        self.video_scene_threshold.setValue(0.45)
+        common_layout.addWidget(
+            self.video_scene_threshold
+        )
+
+        common_layout.addWidget(
+            QLabel("Размер ядра очистки маски:")
+        )
+        self.video_morphology_kernel = QSpinBox()
+        self.video_morphology_kernel.setRange(1, 31)
+        self.video_morphology_kernel.setSingleStep(2)
+        self.video_morphology_kernel.setValue(3)
+        common_layout.addWidget(
+            self.video_morphology_kernel
+        )
+
+        common_layout.addWidget(
+            QLabel("Минимальная площадь области (пиксели):")
+        )
+        self.video_min_area = QSpinBox()
+        self.video_min_area.setRange(0, 10000)
+        self.video_min_area.setValue(20)
+        common_layout.addWidget(self.video_min_area)
+
+        layout.addWidget(common_group)
 
         self.video_background_button = QPushButton(
-            "Выделить движущиеся объекты и сохранить маску"
+            "Обнаружить движение и сохранить результаты"
         )
         self.video_background_button.clicked.connect(
             self.run_video_background
@@ -976,14 +1066,18 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(QLabel("Размытие движения"))
 
-        layout.addWidget(QLabel("Размер ядра (нечётное число):"))
+        layout.addWidget(
+            QLabel("Размер ядра (нечётное число):")
+        )
         self.video_blur_kernel = QSpinBox()
         self.video_blur_kernel.setRange(3, 51)
         self.video_blur_kernel.setSingleStep(2)
         self.video_blur_kernel.setValue(15)
         layout.addWidget(self.video_blur_kernel)
 
-        layout.addWidget(QLabel("Направление размытия:"))
+        layout.addWidget(
+            QLabel("Направление размытия:")
+        )
         self.video_blur_direction = QComboBox()
         self.video_blur_direction.addItems(DIRECTIONS)
         layout.addWidget(self.video_blur_direction)
@@ -997,13 +1091,26 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.video_blur_button)
 
         self.video_result_label = QLabel(
-            "Выберите ролик, затем запустите нужную обработку."
+            "Выберите ролик и алгоритм обработки."
         )
         self.video_result_label.setWordWrap(True)
         layout.addWidget(self.video_result_label)
 
         layout.addStretch()
+
+        self._update_video_algorithm_controls(
+            self.video_algorithm.currentText()
+        )
+
         return tab
+
+    def _update_video_algorithm_controls(self, algorithm):
+        is_mog2 = algorithm == "MOG2"
+
+        self.video_mog2_group.setVisible(is_mog2)
+        self.video_difference_group.setVisible(not is_mog2)
+
+
 
     def open_video(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -1077,8 +1184,9 @@ class MainWindow(QMainWindow):
                 f"Обработано кадров: {processed}."
             )
 
-        # Даём Qt возможность обновить интерфейс.
         QApplication.processEvents()
+
+
 
     def run_video_background(self):
         if not getattr(self, "video_path", None):
@@ -1090,37 +1198,95 @@ class MainWindow(QMainWindow):
             return
 
         output_path = self._choose_video_output(
-            "Сохранить маску движущихся объектов"
+            "Сохранить маску движения"
         )
 
         if not output_path:
             return
 
+        output_file = Path(output_path)
+
+        overlay_path = str(
+            output_file.with_name(
+                f"{output_file.stem}_overlay.mp4"
+            )
+        )
+
+        # Не допускаем перезаписи исходника.
+        if Path(self.video_path).resolve() in (
+            Path(output_path).resolve(),
+            Path(overlay_path).resolve(),
+        ):
+            QMessageBox.warning(
+                self,
+                "Некорректный путь",
+                "Выходные файлы не должны совпадать с исходным видео.",
+            )
+            return
+
+        algorithm = self.video_algorithm.currentText()
+
         self.video_background_button.setEnabled(False)
         self.video_blur_button.setEnabled(False)
+        self.video_open_button.setEnabled(False)
 
         try:
-            result = process_video_background(
-                self.video_path,
-                output_path,
-                history=self.video_history.value(),
-                var_threshold=self.video_threshold.value(),
-                detect_shadows=self.video_shadows.isChecked(),
-                warmup_frames=self.video_warmup.value(),
-                progress_callback=self._video_progress,
-            )
+            if algorithm == "MOG2":
+                result = process_video_background(
+                    input_path=self.video_path,
+                    output_path=output_path,
+                    history=self.video_history.value(),
+                    var_threshold=self.video_threshold.value(),
+                    detect_shadows=self.video_shadows.isChecked(),
+                    warmup_frames=self.video_warmup.value(),
+                    learning_rate=self.video_learning_rate.value(),
+                    scene_change_threshold=(
+                        self.video_scene_threshold.value()
+                    ),
+                    morphology_kernel=(
+                        self.video_morphology_kernel.value()
+                    ),
+                    min_component_area=self.video_min_area.value(),
+                    overlay_output_path=overlay_path,
+                    progress_callback=self._video_progress,
+                )
+
+            else:
+                result = process_video_frame_difference(
+                    input_path=self.video_path,
+                    output_path=output_path,
+                    difference_threshold=(
+                        self.video_diff_threshold.value()
+                    ),
+                    warmup_frames=self.video_warmup.value(),
+                    scene_change_threshold=(
+                        self.video_scene_threshold.value()
+                    ),
+                    morphology_kernel=(
+                        self.video_morphology_kernel.value()
+                    ),
+                    min_component_area=self.video_min_area.value(),
+                    overlay_output_path=overlay_path,
+                    progress_callback=self._video_progress,
+                )
 
             self.video_result_label.setText(
-                "Выделение движения завершено.\n"
-                f"Файл: {result['output_path']}\n"
-                f"Кадров обработано: {result['frames_processed']}\n"
+                f"Алгоритм: {algorithm}\n"
+                "Обработка завершена.\n"
+                f"Маска: {result['output_path']}\n"
+                f"Наложение: {result['overlay_output_path']}\n"
+                f"Кадров обработано: "
+                f"{result['frames_processed']}\n"
                 f"Разрешение: {result['width']} × "
                 f"{result['height']}\n"
-                "В маске фон чёрный, движущиеся области светлые."
+                f"Обнаружено смен сцен: "
+                f"{result['scene_changes_detected']}\n"
+                f"Средняя доля переднего плана: "
+                f"{result['average_foreground_percent']}%"
             )
 
             self.statusBar().showMessage(
-                "Вычитание фона завершено."
+                f"Обнаружение движения завершено: {algorithm}."
             )
 
         except (ValueError, OSError, cv2.error) as exc:
@@ -1133,6 +1299,7 @@ class MainWindow(QMainWindow):
         finally:
             self.video_background_button.setEnabled(True)
             self.video_blur_button.setEnabled(True)
+            self.video_open_button.setEnabled(True)
 
     def run_video_motion_blur(self):
         if not getattr(self, "video_path", None):
