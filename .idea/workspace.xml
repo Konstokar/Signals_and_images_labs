@@ -2,18 +2,12 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="20d0ac06-a2e6-439b-b283-b6a9812934db" name="Changes" comment="Init commit">
-      <change afterPath="$PROJECT_DIR$/gui/main_window.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/image/color_models.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/image/edges.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/image/features.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/image/filters.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/image/histogram.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/image/info.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/image/morphology.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/image/transforms.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/video/background.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/video/motion_blur.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/Lab_1.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/Lab_1.iml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/gui/main_window.py" beforeDir="false" afterPath="$PROJECT_DIR$/gui/main_window.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/image/info.py" beforeDir="false" afterPath="$PROJECT_DIR$/image/info.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -30,6 +24,18 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
+  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
+  "lastFilter": {
+    "state": "OPEN",
+    "assignee": "Konstokar"
+  }
+}]]></component>
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/Konstokar/Signals_and_images_labs.git",
+    "accountId": "923e1660-bca7-4b0b-affe-91785c47a295"
+  }
+}]]></component>
   <component name="ProjectColorInfo"><![CDATA[{
   "associatedIndex": 4
 }]]></component>
@@ -42,8 +48,10 @@
   "keyToString": {
     "ModuleVcsDetector.initialDetectionPerformed": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
     "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "master"
+    "git-widget-placeholder": "master",
+    "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable"
   }
 }]]></component>
   <component name="RecentsManager">
@@ -74,7 +82,15 @@
       <option name="project" value="LOCAL" />
       <updated>1791960914754</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="Init commit">
+      <option name="closed" value="true" />
+      <created>1791961833683</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1791961833683</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
@@ -86,7 +102,7 @@
       <breakpoints>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/main.py</url>
-          <line>8</line>
+          <line>5</line>
           <option name="timeStamp" value="1" />
         </line-breakpoint>
       </breakpoints>
