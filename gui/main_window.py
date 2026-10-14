@@ -17,6 +17,7 @@ from image.morphology import (
     apply_morphology,
 )
 from image.filters import SUPPORTED_FILTERS, apply_filter
+from image.edges import SUPPORTED_EDGE_DETECTORS, detect_edges
 
 from image.info import get_image_info
 from image.color_models import SUPPORTED_MODELS, convert_color
@@ -95,6 +96,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self._create_histogram_tab(), "Гистограммы")
         self.tabs.addTab(self._create_morphology_tab(), "Морфология")
         self.tabs.addTab(self._create_filter_tab(), "Фильтры")
+        self.tabs.addTab(self._create_edges_tab(), "Контуры")
 
         right_layout.addWidget(info_group)
         right_layout.addWidget(self.tabs, stretch=1)
@@ -651,5 +653,121 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 "Ошибка фильтрации",
+                str(exc),
+            )
+
+    def _create_edges_tab(self):
+
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        description = QLabel(
+            "Обнаружение границ позволяет выделять переходы яркости "
+            "и контуры объектов. Доступны алгоритмы Canny и Roberts."
+        )
+        description.setWordWrap(True)
+        layout.addWidget(description)
+
+        layout.addWidget(QLabel("Детектор границ:"))
+
+        self.edge_detector = QComboBox()
+        self.edge_detector.addItems(SUPPORTED_EDGE_DETECTORS)
+        self.edge_detector.currentTextChanged.connect(
+            self._update_edge_controls
+        )
+        layout.addWidget(self.edge_detector)
+
+        layout.addWidget(QLabel("Нижний порог Canny:"))
+
+        self.canny_low_threshold = QSpinBox()
+        self.canny_low_threshold.setRange(0, 255)
+        self.canny_low_threshold.setValue(50)
+        layout.addWidget(self.canny_low_threshold)
+
+        layout.addWidget(QLabel("Верхний порог Canny:"))
+
+        self.canny_high_threshold = QSpinBox()
+        self.canny_high_threshold.setRange(0, 255)
+        self.canny_high_threshold.setValue(150)
+        layout.addWidget(self.canny_high_threshold)
+
+        layout.addWidget(QLabel("Предварительное размытие Canny:"))
+
+        self.canny_blur_size = QComboBox()
+        self.canny_blur_size.addItems(["1", "3", "5", "7", "9"])
+        self.canny_blur_size.setCurrentText("3")
+        layout.addWidget(self.canny_blur_size)
+
+        layout.addWidget(QLabel("Порог Roberts:"))
+
+        self.roberts_threshold = QSpinBox()
+        self.roberts_threshold.setRange(0, 255)
+        self.roberts_threshold.setValue(40)
+        layout.addWidget(self.roberts_threshold)
+
+        self.edge_apply_button = QPushButton(
+            "Обнаружить границы"
+        )
+        self.edge_apply_button.clicked.connect(
+            self.apply_edge_detector
+        )
+        layout.addWidget(self.edge_apply_button)
+
+        layout.addWidget(
+            QLabel(
+                "Результат отображается как чёрно-белая карта границ. "
+                "Для нового эксперимента можно восстановить исходник."
+            )
+        )
+
+        layout.addStretch()
+
+        self._update_edge_controls(
+            self.edge_detector.currentText()
+        )
+
+        return tab
+
+    def _update_edge_controls(self, detector):
+
+        is_canny = detector == "Canny"
+        is_roberts = detector == "Roberts"
+
+        self.canny_low_threshold.setEnabled(is_canny)
+        self.canny_high_threshold.setEnabled(is_canny)
+        self.canny_blur_size.setEnabled(is_canny)
+        self.roberts_threshold.setEnabled(is_roberts)
+
+    def apply_edge_detector(self):
+
+        if self.current_image is None:
+            QMessageBox.information(
+                self,
+                "Нет изображения",
+                "Сначала загрузите изображение.",
+            )
+            return
+
+        try:
+            result = detect_edges(
+                image=self.current_image,
+                detector=self.edge_detector.currentText(),
+                low_threshold=self.canny_low_threshold.value(),
+                high_threshold=self.canny_high_threshold.value(),
+                roberts_threshold=self.roberts_threshold.value(),
+                blur_size=int(self.canny_blur_size.currentText()),
+            )
+
+            self.current_image = result
+            self._display_image(result)
+
+            self.statusBar().showMessage(
+                f"Обнаружение границ: {self.edge_detector.currentText()}."
+            )
+
+        except (ValueError, TypeError, cv2.error) as exc:
+            QMessageBox.warning(
+                self,
+                "Ошибка обнаружения границ",
                 str(exc),
             )
