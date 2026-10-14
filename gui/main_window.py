@@ -12,6 +12,10 @@ from PySide6.QtWidgets import (
     QMessageBox, QScrollArea, QTabWidget, QComboBox,
     QDoubleSpinBox, QSpinBox, QLineEdit, QGridLayout,
 )
+from image.morphology import (
+    SUPPORTED_OPERATIONS,
+    apply_morphology,
+)
 
 from image.info import get_image_info
 from image.color_models import SUPPORTED_MODELS, convert_color
@@ -88,6 +92,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self._create_color_tab(), "Цветовые модели")
         self.tabs.addTab(self._create_transform_tab(), "Преобразования")
         self.tabs.addTab(self._create_histogram_tab(), "Гистограммы")
+        self.tabs.addTab(self._create_morphology_tab(), "Морфология")
 
         right_layout.addWidget(info_group)
         right_layout.addWidget(self.tabs, stretch=1)
@@ -435,5 +440,101 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 "Ошибка построения гистограммы",
+                str(exc),
+            )
+
+    def _create_morphology_tab(self):
+
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        description = QLabel(
+            "Морфологические операции изменяют структуру светлых "
+            "областей изображения. Обработка выполняется в градациях "
+            "серого с использованием квадратного структурного элемента."
+        )
+        description.setWordWrap(True)
+        layout.addWidget(description)
+
+        operation_layout = QHBoxLayout()
+        operation_layout.addWidget(QLabel("Операция:"))
+
+        self.morphology_operation = QComboBox()
+        self.morphology_operation.addItems(SUPPORTED_OPERATIONS)
+        operation_layout.addWidget(self.morphology_operation)
+
+        layout.addLayout(operation_layout)
+
+        kernel_layout = QHBoxLayout()
+        kernel_layout.addWidget(QLabel("Размер ядра:"))
+
+        self.morphology_kernel_size = QSpinBox()
+        self.morphology_kernel_size.setRange(1, 31)
+        self.morphology_kernel_size.setSingleStep(2)
+        self.morphology_kernel_size.setValue(3)
+
+        kernel_layout.addWidget(self.morphology_kernel_size)
+        layout.addLayout(kernel_layout)
+
+        iterations_layout = QHBoxLayout()
+        iterations_layout.addWidget(QLabel("Повторения:"))
+
+        self.morphology_iterations = QSpinBox()
+        self.morphology_iterations.setRange(1, 10)
+        self.morphology_iterations.setValue(1)
+
+        iterations_layout.addWidget(self.morphology_iterations)
+        layout.addLayout(iterations_layout)
+
+        self.morphology_button = QPushButton(
+            "Применить морфологическую операцию"
+        )
+        self.morphology_button.clicked.connect(
+            self.apply_morphology_operation
+        )
+        layout.addWidget(self.morphology_button)
+
+        layout.addWidget(
+            QLabel(
+                "Результат появится в основной области просмотра. "
+                "Для возврата к исходнику используйте кнопку сброса."
+            )
+        )
+
+        layout.addStretch()
+        return tab
+
+    def apply_morphology_operation(self):
+
+        if self.current_image is None:
+            QMessageBox.information(
+                self,
+                "Нет изображения",
+                "Сначала загрузите изображение.",
+            )
+            return
+
+        try:
+            result = apply_morphology(
+                self.current_image,
+                self.morphology_operation.currentText(),
+                self.morphology_kernel_size.value(),
+                self.morphology_iterations.value(),
+            )
+
+            self.current_image = result
+            self._display_image(result)
+
+            self.statusBar().showMessage(
+                "Морфологическая операция применена."
+            )
+
+            if self.tabs.currentIndex() == 2:
+                self.update_histograms()
+
+        except (ValueError, TypeError, cv2.error) as exc:
+            QMessageBox.warning(
+                self,
+                "Ошибка морфологической обработки",
                 str(exc),
             )
