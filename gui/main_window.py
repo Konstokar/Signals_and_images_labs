@@ -16,6 +16,7 @@ from image.morphology import (
     SUPPORTED_OPERATIONS,
     apply_morphology,
 )
+from image.filters import SUPPORTED_FILTERS, apply_filter
 
 from image.info import get_image_info
 from image.color_models import SUPPORTED_MODELS, convert_color
@@ -93,6 +94,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self._create_transform_tab(), "Преобразования")
         self.tabs.addTab(self._create_histogram_tab(), "Гистограммы")
         self.tabs.addTab(self._create_morphology_tab(), "Морфология")
+        self.tabs.addTab(self._create_filter_tab(), "Фильтры")
 
         right_layout.addWidget(info_group)
         right_layout.addWidget(self.tabs, stretch=1)
@@ -536,5 +538,118 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 "Ошибка морфологической обработки",
+                str(exc),
+            )
+
+    def _create_filter_tab(self):
+
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        description = QLabel(
+            "Выберите фильтр и настройте его параметры. "
+            "Результат будет показан в основной области просмотра."
+        )
+        description.setWordWrap(True)
+        layout.addWidget(description)
+
+        layout.addWidget(QLabel("Фильтр:"))
+
+        self.filter_selector = QComboBox()
+        self.filter_selector.addItems(SUPPORTED_FILTERS)
+        self.filter_selector.currentTextChanged.connect(
+            self._update_filter_controls
+        )
+        layout.addWidget(self.filter_selector)
+
+        layout.addWidget(QLabel("Размер ядра:"))
+
+        self.filter_kernel_size = QSpinBox()
+        self.filter_kernel_size.setRange(3, 51)
+        self.filter_kernel_size.setSingleStep(2)
+        self.filter_kernel_size.setValue(15)
+        layout.addWidget(self.filter_kernel_size)
+
+        layout.addWidget(QLabel("Сила эффекта:"))
+
+        self.filter_strength = QDoubleSpinBox()
+        self.filter_strength.setRange(0.1, 5.0)
+        self.filter_strength.setSingleStep(0.1)
+        self.filter_strength.setValue(1.0)
+        layout.addWidget(self.filter_strength)
+
+        layout.addWidget(QLabel("Направление размытия:"))
+
+        self.filter_direction = QComboBox()
+        self.filter_direction.addItems([
+            "Горизонтально",
+            "Вертикально",
+            "Диагонально",
+        ])
+        layout.addWidget(self.filter_direction)
+
+        self.filter_apply_button = QPushButton("Применить фильтр")
+        self.filter_apply_button.clicked.connect(self.apply_selected_filter)
+        layout.addWidget(self.filter_apply_button)
+
+        layout.addStretch()
+
+        self._update_filter_controls(
+            self.filter_selector.currentText()
+        )
+
+        return tab
+
+    def _update_filter_controls(self, filter_name):
+
+        uses_kernel = filter_name in (
+            "Размытие в движении",
+            "Медианная фильтрация",
+        )
+        uses_strength = filter_name in (
+            "Повышение резкости",
+            "Тиснение",
+        )
+        uses_direction = filter_name == "Размытие в движении"
+
+        self.filter_kernel_size.setEnabled(uses_kernel)
+        self.filter_strength.setEnabled(uses_strength)
+        self.filter_direction.setEnabled(uses_direction)
+
+        if filter_name == "Размытие в движении":
+            self.filter_kernel_size.setValue(15)
+        elif filter_name == "Медианная фильтрация":
+            self.filter_kernel_size.setValue(3)
+
+    def apply_selected_filter(self):
+
+        if self.current_image is None:
+            QMessageBox.information(
+                self,
+                "Нет изображения",
+                "Сначала загрузите изображение.",
+            )
+            return
+
+        try:
+            result = apply_filter(
+                image=self.current_image,
+                filter_name=self.filter_selector.currentText(),
+                kernel_size=self.filter_kernel_size.value(),
+                strength=self.filter_strength.value(),
+                direction=self.filter_direction.currentText(),
+            )
+
+            self.current_image = result
+            self._display_image(result)
+
+            self.statusBar().showMessage(
+                f"Применён фильтр: {self.filter_selector.currentText()}."
+            )
+
+        except (ValueError, TypeError, cv2.error) as exc:
+            QMessageBox.warning(
+                self,
+                "Ошибка фильтрации",
                 str(exc),
             )
